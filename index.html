@@ -207,7 +207,12 @@ function me(t){const d=document.createElement('div');d.className='line me';d.tex
 function setScene(f){sceneEl.style.backgroundImage='url(images/'+f+')';}
 function refreshTray(){lettersEl.textContent=found.concat(Array(SECRET.length-found.length).fill('_')).join(' ');}
 function flicker(lightFile,darkFile){let t=0,flips=8;(function loop(){setScene(t%2===0?lightFile:darkFile);t++;if(t<=flips)setTimeout(loop,120+Math.random()*100);else setScene(lightFile);})();}
-
+function stopAmbient(){
+  if(ambient){
+    try { ambient.pause(); ambient.currentTime = 0; } catch(e){}
+    ambient = null;
+  }
+}
 function showOverlay(img,sfx){try{faceImg.src='images/'+img;}catch(e){}flash.classList.add('show');face.classList.add('show');play(sfx||'scream',0.9);setTimeout(()=>{flash.classList.remove('show');face.classList.remove('show');},650);}
 
 /* ===== LETTERS ===== */
@@ -228,6 +233,7 @@ function openCredits(){
   clearInterval(creditsTimer);
   creditsTimer=setInterval(()=>{on=!on;creditsBg.style.backgroundImage=on?"url(images/credit_light.png)":"url(images/credit_dark.png)";},350);
   stopMusicBox();                     // ensure no overlap
+  stopAmbient();
   musicBox = playLoop('musicBox',0.7); // start looping music box for credits
 }
 function closeCredits(){
@@ -337,7 +343,7 @@ const SCENES=[
   enter:"Le gymnase craque. Un ballon roule lentement vers toi.",
   challenge:"On dirait qu’on te l’a lancé.",
   choices:[
-    {text:"Shooter dans le ballon",kind:"flavor",response:"Le bruit résonne trop longtemps.",sfx:"knock"},
+    {text:"Lancer le ballon",kind:"flavor",response:"Le bruit résonne trop longtemps.",sfx:"knock"},
     {text:"Regarder les gradins",kind:"flavor",response:"Des traces montent et… reviennent.",sfx:"steps"},
     {text:"Attraper le ballon",kind:"correct",response:"Tu l’attrapes. Une lueur rouge apparaît au mur.",sfx:"light"}
   ],
@@ -528,5 +534,6 @@ function restartGame(){
 </script>
 </body>
 </html>
+
 
 
