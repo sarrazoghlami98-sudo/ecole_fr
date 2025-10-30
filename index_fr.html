@@ -4,6 +4,15 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>L’Académie Saint-Clément hantée</title>
+
+<!-- Optional CSP that works on GitHub Pages with inline CSS/JS -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               img-src 'self';
+               media-src 'self';
+               style-src 'self' 'unsafe-inline';
+               script-src 'self' 'unsafe-inline'">
+
 <style>
   :root{
     --bg:#07090c; --ink:#eaf6ff; --muted:#98a9bb; --accent:#78e0ff;
@@ -129,7 +138,7 @@
     <p>Écrit par <b>Amin Rezgui</b> &amp; <b>SZ</b></p>
     <p class="note">La peur se surmonte avec la <b>persévérance</b>.</p>
     <div class="credits-actions">
-      <button id="creditsWake" class="credits-btn" type="button">Sortir</button>
+      <button id="creditsQuit" class="credits-btn" type="button">Quitter</button>
       <button id="creditsAgain" class="credits-btn" type="button">Rejouer</button>
     </div>
   </div>
@@ -142,14 +151,14 @@ input=document.getElementById('cmd'),lettersEl=document.getElementById('letters'
 flash=document.getElementById('flash'),face=document.getElementById('face'),
 faceImg=document.getElementById('faceImg'),choicesEl=document.getElementById('choices'),
 creditsEl=document.getElementById('credits'),creditsBg=document.getElementById('creditsBg'),
-creditsWake=document.getElementById('creditsWake'),creditsAgain=document.getElementById('creditsAgain');
+creditsQuit=document.getElementById('creditsQuit'),creditsAgain=document.getElementById('creditsAgain');
 
 /* ===== STATE ===== */
 let userName="Élève",freed=false,finalPhase=false,playAgainPhase=false,creditsTimer=null;
 const SECRET="PERSEVERANCE".split(''); // logic sans accents
 let remaining=[...SECRET],found=[],iScene=0,finalHelpStep=0;
 
-/* ===== AUDIO (full set, no port-control) ===== */
+/* ===== AUDIO (full set) ===== */
 const SFX={
   ambient:"sounds/eerie-ambiance.mp3",
   intro:"sounds/intro.mp3",
@@ -170,12 +179,22 @@ const SFX={
   scratching:"sounds/scratching.mp3",
   musicBox:"sounds/scary-music-box.mp3"
 };
-let ambient=null;
-function play(name,vol=0.9){try{const a=new Audio(SFX[name]||name);a.volume=vol;a.play();}catch(e){}}
+let ambient=null, musicBox=null;
+
+function play(name,vol=0.9){
+  try{const a=new Audio(SFX[name]||name);a.volume=vol;a.play();return a;}catch(e){return null;}
+}
+function playLoop(name,vol=0.7){
+  try{const a=new Audio(SFX[name]||name);a.loop=true;a.volume=vol;a.play();return a;}catch(e){return null;}
+}
+function stopMusicBox(){
+  if(musicBox){ try{ musicBox.pause(); musicBox.currentTime=0; }catch(e){} musicBox=null; }
+}
+
 function startAmbient(){
   try{
     ambient=new Audio(SFX.ambient); ambient.loop=true; ambient.volume=0.35;
-    const resume=()=>{ambient.play().catch(()=>{});window.removeEventListener('pointerdown',resume);window.removeEventListener('keydown',resume);}
+    const resume=()=>{ambient.play().catch(()=>{});window.removeEventListener('pointerdown',resume);window.removeEventListener('keydown',resume);};
     const p=ambient.play();
     if(p&&p.catch){p.catch(()=>{window.addEventListener('pointerdown',resume,{once:true});window.addEventListener('keydown',resume,{once:true});});}
   }catch(e){}
@@ -183,7 +202,8 @@ function startAmbient(){
 
 /* ===== HELPERS ===== */
 function say(h,cls='note'){const d=document.createElement('div');d.className='line '+cls;d.innerHTML=h;logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
-function me(t){say('› '+t,'me');}
+// Harden user echo: no HTML injection
+function me(t){const d=document.createElement('div');d.className='line me';d.textContent='› '+t;logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
 function setScene(f){sceneEl.style.backgroundImage='url(images/'+f+')';}
 function refreshTray(){lettersEl.textContent=found.concat(Array(SECRET.length-found.length).fill('_')).join(' ');}
 function flicker(lightFile,darkFile){let t=0,flips=8;(function loop(){setScene(t%2===0?lightFile:darkFile);t++;if(t<=flips)setTimeout(loop,120+Math.random()*100);else setScene(lightFile);})();}
@@ -207,15 +227,21 @@ function openCredits(){
   let on=false; creditsBg.style.backgroundImage="url(images/credit_dark.png)";
   clearInterval(creditsTimer);
   creditsTimer=setInterval(()=>{on=!on;creditsBg.style.backgroundImage=on?"url(images/credit_light.png)":"url(images/credit_dark.png)";},350);
-  play('musicBox',0.7);
+  stopMusicBox();                     // ensure no overlap
+  musicBox = playLoop('musicBox',0.7); // start looping music box for credits
 }
-creditsWake.onclick=()=>{clearInterval(creditsTimer);creditsEl.classList.remove('show');};
-creditsAgain.onclick=()=>{clearInterval(creditsTimer);creditsEl.classList.remove('show');restartGame();};
+function closeCredits(){
+  clearInterval(creditsTimer);
+  creditsEl.classList.remove('show');
+  stopMusicBox();                     // stop on Quitter/Rejouer
+}
+creditsQuit.onclick = ()=>{ closeCredits(); };
+creditsAgain.onclick= ()=>{ closeCredits(); restartGame(); };
 
 /* ===== SCENES ===== */
 const SCENES=[
 
-/* 1) ENTRÉE — “un courant d’air…” + choices specified */
+/* 1) ENTRÉE */
 {
   id:"entree",
   file:"ecole_entree.png",
@@ -229,7 +255,7 @@ const SCENES=[
   sfx:"whisper"
 },
 
-/* 2) COULOIR — flicker; invites to MOVE */
+/* 2) COULOIR */
 {
   id:"couloir",
   fileLight:"couloir_light.png",
@@ -245,7 +271,7 @@ const SCENES=[
   flicker:true
 },
 
-/* 3) SALLE DE BAIN — mirror makes sense; reflection out of sync; A hints it wants your name */
+/* 3) SALLE DE BAIN */
 {
   id:"miroir",
   file:"salle_miroir.png",
@@ -260,7 +286,7 @@ const SCENES=[
   ghostCue:true
 },
 
-/* 4) BIBLIOTHÈQUE — zombie jumpscare here */
+/* 4) BIBLIOTHÈQUE */
 {
   id:"bibliotheque",
   file:"bibliotheque_hantee.png",
@@ -275,7 +301,7 @@ const SCENES=[
   zombieCue:true
 },
 
-/* 5) CAFÉTÉRIA — no jumpscare; mood only */
+/* 5) CAFÉTÉRIA */
 {
   id:"cafeteria",
   file:"cafeteria_ecole.png",
@@ -289,7 +315,7 @@ const SCENES=[
   sfx:"light"
 },
 
-/* 6) CLASSE — board shows P—R***ce; “Lire les lettres” silently adds 4 letters */
+/* 6) CLASSE */
 {
   id:"classe",
   file:"salle_classe.png",
@@ -304,7 +330,7 @@ const SCENES=[
   shadowCue:true
 },
 
-/* 7) GYMNASE — catch the ball is correct */
+/* 7) GYMNASE */
 {
   id:"gymnase",
   file:"gymnase_sombre.png",
@@ -318,7 +344,7 @@ const SCENES=[
   sfx:"steps"
 },
 
-/* 8) MUR — souffler sur la poussière = correct */
+/* 8) MUR */
 {
   id:"mur",
   file:"mur_symboles.png",
@@ -353,14 +379,12 @@ function enter(n){
 
   showChoices(sc.choices);
 
-  // Planned jump-scares, not random
   if(sc.ghostCue){ setTimeout(()=>showOverlay('ghost.png','whisperICU'),600); }
   if(sc.zombieCue){ setTimeout(()=>showOverlay('zombie.png','scream'),600); }
   if(sc.shadowCue){ setTimeout(()=>showOverlay('shadow.png','woman'),550); }
 }
 function nextScene(){ if(iScene<SCENES.length-1) enter(iScene+1); else finishLetters(); }
 
-/* Award exactly ONE letter per challenge (except the special classroom action) */
 function awardOneLetterAndContinue(){
   giveLetters(1,false);
   setTimeout(()=>{ remaining.length? nextScene(): finishLetters(); }, 900);
@@ -373,7 +397,6 @@ const FINAL_CHOICES=[
   {text:"Demander un indice (C)",kind:"final"}
 ];
 function finalHelpPrompt(){
-  // 3 distinct hints, then reveal letters from the 4th request
   if(finalHelpStep===0){
     say("Indice : à l’école, cette valeur t’aide à <b>continuer un exercice difficile</b> sans abandonner.",'note');
   }else if(finalHelpStep===1){
@@ -392,7 +415,7 @@ function finalHelpPrompt(){
 
 function finishLetters(){
   finalPhase=true;
-  setScene('couloir_light.png'); // as requested (not the entrance)
+  setScene('couloir_light.png');
   hideChoices();
   say("<span class='bloody'>Tu as réuni toutes les lettres, "+userName+".</span>",'ghost');
   say("Tape le <b>mot complet</b> pour briser la malédiction, ou demande un indice.",'note');
@@ -407,7 +430,6 @@ function win(){
   say("<span class='good'>La lumière du matin traverse les fenêtres. L’école respire à nouveau.</span>",'ghost');
   say('« Merci, <b>'+userName+'</b>. »');
 
-  // End choices (credits only if requested)
   const endChoices=[
     {text:"Rejouer",kind:"restart"},
     {text:"Afficher les noms",kind:"credits"}
@@ -443,17 +465,13 @@ function selectChoice(key, list){
     if(choice.kind==='credits'){ openCredits(); return; }
   }
 
-  // classroom special: silently add 4 letters
   if(SCENES[iScene].id==='classe' && choice.kind==='classLetters'){
-    giveLetters(4,true); // silently update tray
+    giveLetters(4,true);
     setTimeout(()=>{ remaining.length? nextScene(): finishLetters(); }, 900);
     return;
   }
 
-  if(choice.kind==='correct'){ awardOneLetterAndContinue(); return; };
-
-  // Wrong answers: mild guidance
-/*  say("Réfléchis… que ferais-tu vraiment dans cette situation ?",'note');*/
+  if(choice.kind==='correct'){ awardOneLetterAndContinue(); return; }
 }
 
 /* ===== INPUT ===== */
@@ -461,7 +479,6 @@ function handle(txt){
   txt=txt.trim(); if(!txt) return; me(txt);
 
   if(finalPhase){
-    // accept with/without accents, any case
     const cleaned=txt.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
     if(cleaned==="PERSEVERANCE") return win();
     finalHelpPrompt(); return;
@@ -489,9 +506,8 @@ document.getElementById('io').addEventListener('submit',e=>{
     if(v){
       userName=v.replace(/[<>]/g,''); waitingName=false;
       say("Bonsoir, <b>"+userName+"</b>. Avance sans te retourner.",'ghost');
-      // Give one letter immediately upon giving the name
       giveLetters(1,false);
-      enter(0); // go to Entrée scene
+      enter(0);
     }else{
       say("<span class='bad'>Les esprits veulent connaître ton nom…</span>",'ghost');
     }
